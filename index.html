@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>C Store Inventory System</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <section id="loginPage" class="login-wrap">
+    <div class="login-card">
+      <img class="login-logo" src="assets/logo.jpg" alt="C Store Logo" />
+      <h1>C Store <span>Inventory</span></h1>
+      <div class="subtitle">يرجى تسجيل الدخول للمتابعة</div>
+      <div class="field">
+        <label>اكتب اسمك</label>
+        <input id="loginName" class="input" autocomplete="name" placeholder="مثال: محمد" />
+      </div>
+      <div class="field">
+        <label>كلمة المرور</label>
+        <input id="loginPass" class="input" type="password" placeholder="كلمة المرور" />
+      </div>
+      <button class="btn btn-primary btn-block" onclick="login()">دخول</button>
+      <div id="loginError" class="alert hidden">كلمة المرور غير صحيحة</div>
+      <div class="subtitle" style="margin-top:18px;font-size:13px">
+        الافتراضي: باسورد الموظف 1234 / باسورد الأدمن admin123
+      </div>
+    </div>
+  </section>
+
+  <main id="appPage" class="hidden">
+    <header class="app-header">
+      <div class="brand">
+        <img src="assets/logo.jpg" alt="Logo" />
+        <div><div class="brand-title">C Store <span>Inventory</span></div><div class="muted" style="font-size:12px;font-weight:800">Live Supabase</div></div>
+      </div>
+      <div class="top-actions">
+        <div class="user-chip">
+          <div class="avatar">👤</div>
+          <div>
+            <div id="headerUser" style="font-weight:900">---</div>
+            <div id="headerRole" class="muted" style="font-weight:800;font-size:13px">---</div>
+          </div>
+        </div>
+        <button class="btn btn-outline" onclick="logout()">تسجيل الخروج</button>
+      </div>
+    </header>
+
+    <section id="staffStartPage" class="container hidden">
+      <div class="hero-card">
+        <div class="scan-illustration">▥</div>
+        <h2>مرحبًا بك في نظام جرد المخزون</h2>
+        <p>اضغط على زر بداية الجرد للبدء في تسجيل المنتجات</p>
+        <button class="btn btn-primary btn-block" style="max-width:520px;margin:auto" onclick="goStaffScan()">▶ بداية الجرد</button>
+      </div>
+      <button class="last-card" onclick="openMyMovements()" style="cursor:pointer;width:100%;text-align:right">
+        <div class="last-icon">↺</div>
+        <div>
+          <h3>حركاتي</h3>
+          <div id="startLastText" class="muted">لا توجد حركات مسجلة بعد</div>
+        </div>
+      </button>
+    </section>
+
+    <section id="staffScanPage" class="container hidden">
+      <div class="top-actions" style="justify-content:space-between;margin-bottom:18px">
+        <button class="btn btn-danger" onclick="goStaffStart()">إنهاء الجرد</button>
+        <button class="btn btn-outline" onclick="openMyMovements()">↺ حركاتي</button>
+      </div>
+      <div class="scan-grid">
+        <div class="card" style="text-align:center">
+          <h2>مسح الباركود</h2>
+          <p class="muted">امسح الباركود أو اكتب اسم المنتج</p>
+          <input id="scanInput" class="input big-input" placeholder="امسح الباركود هنا..." onkeydown="scanKey(event)" oninput="liveSearch()" />
+          <div class="helper">يمكنك كتابة اسم المنتج أو جزء من الباركود</div>
+          <div id="searchResults" class="result-list hidden"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="staffQtyPage" class="container hidden">
+      <div class="top-actions" style="justify-content:space-between;margin-bottom:18px">
+        <button class="btn btn-danger" onclick="goStaffStart()">إنهاء الجرد</button>
+        <button class="btn btn-outline" onclick="backToScan()">رجوع للباركود</button>
+      </div>
+      <div class="scan-grid">
+        <div class="card product-card">
+          <div class="panel-title">
+            <h2>بيانات المنتج</h2>
+            <span id="countStateTag" class="tag">---</span>
+          </div>
+          <div class="row"><div class="label">اسم المنتج:</div><div id="pName" class="value">---</div></div>
+          <div class="row"><div class="label">الباركود:</div><div id="pBarcode" class="value" style="color:var(--purple)">---</div></div>
+          <div class="row"><div class="label">القسم:</div><div id="pCategory" class="value">---</div></div>
+          <div class="row"><div class="label">كمية النظام:</div><div id="pSystemQty" class="value">---</div></div>
+          <div class="row"><div class="label">وحدة القياس:</div><div id="pUom" class="value">---</div></div>
+          <div class="row"><div class="label">إجمالي المجرد سابقًا:</div><div id="pPrevQty" class="value">---</div></div>
+        </div>
+        <div class="card">
+          <h2>اكتب الكمية الفعلية</h2>
+          <input id="qtyInput" class="input big-input" type="number" step="0.001" placeholder="اكتب الكمية هنا..." onkeydown="qtyKey(event)" />
+          <div class="helper">اضغط Enter بعد كتابة الكمية للحفظ والانتقال للحركة التالية</div>
+        </div>
+        <div id="saveSuccess" class="success-box hidden">تم حفظ الحركة بنجاح</div>
+        <button class="btn btn-outline" onclick="openMyMovements()" style="max-width:260px">↺ حركاتي</button>
+      </div>
+    </section>
+
+    <section id="adminPage" class="container hidden">
+      <div class="admin-grid" id="adminStats"></div>
+      <div class="admin-layout">
+        <aside class="side-tabs">
+          <button class="btn tab-btn active" data-tab="overview" onclick="setAdminTab('overview')">متابعة التشغيل</button>
+          <button class="btn tab-btn" data-tab="session" onclick="setAdminTab('session')">جلسة الجرد</button>
+          <button class="btn tab-btn" data-tab="upload" onclick="setAdminTab('upload')">رفع شيت المنتجات</button>
+          <button class="btn tab-btn" data-tab="movements" onclick="setAdminTab('movements')">تفاصيل الحركات</button>
+          <button class="btn tab-btn" data-tab="notCounted" onclick="setAdminTab('notCounted')">غير المجرد</button>
+          <button class="btn tab-btn" data-tab="zero" onclick="setAdminTab('zero')">منتجات الزيرو</button>
+          <button class="btn tab-btn" data-tab="shortage" onclick="setAdminTab('shortage')">منتجات العجز</button>
+          <button class="btn tab-btn" data-tab="over" onclick="setAdminTab('over')">منتجات الأوفر</button>
+          <button class="btn tab-btn" data-tab="financial" onclick="setAdminTab('financial')">التقرير المالي</button>
+          <button class="btn tab-btn" data-tab="settings" onclick="setAdminTab('settings')">الإعدادات</button>
+        </aside>
+        <section class="card admin-panel">
+          <div id="adminContent"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <section id="modal" class="modal hidden">
+    <div class="modal-card">
+      <div id="modalContent"></div>
+    </div>
+  </section>
+
+<script>
+const STORAGE_KEY = "cstore_inventory_v1";
+let currentUser = null;
+let selectedProduct = null;
+let currentTab = "overview";
+let state = loadState();
+
+const SUPABASE_URL = "https://voeximywmklhurznjpmn.supabase.co";
+const SUPABASE_KEY = "sb_publishable__aMXLkMwZfq8RbP9EODXrA_ifO_hHsb";
+const cloud = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+let cloudReady = false;
+let liveTimer = null;
+
+function toLocalSession(row){
+  return {
+    id: row.id,
+    name: row.name,
+    status: row.status || "open",
+    openedAt: row.opened_at,
+    closedAt: row.closed_at,
+    createdBy: row.created_by || ""
+  };
+}
+function toLocalProduct(row){
+  return {
+    id: row.id,
+    barcode: clean(row.barcode),
+    name: clean(row.name),
+    systemQty: num(row.system_qty),
+    cost: num(row.cost),
+    category: clean(row.category || "بدون قسم"),
+    uom: clean(row.uom || "")
+  };
+}
+function toLocalMovement(row){
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    employee: row.employee,
+    barcode: row.barcode,
+    name: row.name,
+    category: row.category,
+    systemQty: num(row.system_qty),
+    cost: num(row.cost),
+    uom: row.uom || "",
+    qty: num(row.qty),
+    statusBefore: row.status_before || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+async function cloudLoadAll(){
+  if(!cloud) return false;
+  try{
+    const [settingsRes, productsRes, sessionsRes, movementsRes] = await Promise.all([
+      cloud.from("inventory_settings").select("*").order("id", {ascending:true}).limit(1),
+      cloud.from("inventory_products").select("*").order("id", {ascending:true}),
+      cloud.from("inventory_sessions").select("*").order("opened_at", {ascending:false}),
+      cloud.from("inventory_movements").select("*").order("created_at", {ascending:true})
+    ]);
+    if(settingsRes.error) throw settingsRes.error;
+    if(productsRes.error) throw productsRes.error;
+    if(sessionsRes.error) throw sessionsRes.error;
+    if(movementsRes.error) throw movementsRes.error;
+
+    const defaults = defaultState();
+    const settingsRow = (settingsRes.data || [])[0];
+    state = {
+      settings: settingsRow ? {
+        staffPassword: settingsRow.staff_password || "1234",
+        adminPassword: settingsRow.admin_password || "admin123",
+        id: settingsRow.id
+      } : defaults.settings,
+      products: (productsRes.data || []).map(toLocalProduct),
+      sessions: (sessionsRes.data || []).map(toLocalSession),
+      movements: (movementsRes.data || []).map(toLocalMovement)
+    };
+
+    if(!settingsRow){
+      await cloud.from("inventory_settings").insert({staff_password:"1234", admin_password:"admin123"});
+    }
+    saveState();
+    cloudReady = true;
+    return true;
+  }catch(err){
+    console.error("Supabase load error", err);
+    cloudReady = false;
+    return false;
+  }
+}
+
+function startLiveRefresh(){
+  if(liveTimer) clearInterval(liveTimer);
+  liveTimer = setInterval(async ()=>{
+    if(!currentUser) return;
+    await cloudLoadAll();
+    if(currentUser.role === "admin"){
+      renderAdmin();
+    }else{
+      updateStartLast();
+      if(!activeSession() && !document.getElementById("staffStartPage").classList.contains("hidden")){
+        goStaffStart();
+      }
+    }
+  }, 3000);
+}
+
+async function cloudInsertMovement(movement){
+  if(!cloud) return null;
+  const payload = {
+    session_id: movement.sessionId,
+    employee: movement.employee,
+    barcode: movement.barcode,
+    name: movement.name,
+    category: movement.category,
+    system_qty: movement.systemQty,
+    cost: movement.cost,
+    uom: movement.uom,
+    qty: movement.qty,
+    status_before: movement.statusBefore
+  };
+  const {data, error} = await cloud.from("inventory_movements").insert(payload).select().single();
+  if(error) throw error;
+  return toLocalMovement(data);
+}
+
+function defaultState(){
+  return {
+    settings:{staffPassword:"1234", adminPassword:"admin123"},
+    products:[],
+    movements:[],
+    sessions:[{id:"S-"+Date.now(), name:"جرد فرع عباس - 18/05/2026", openedAt:new Date().toISOString(), closedAt:null, status:"open"}]
+  }
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return defaultState();
+    const parsed = JSON.parse(raw);
+    return {...defaultState(), ...parsed, settings:{...defaultState().settings, ...(parsed.settings||{})}};
+  }catch(e){return defaultState()}
+}
+function saveState(){localStorage.setItem(STORAGE_KEY, JSON.stringify(state))}
+function activeSession(){return state.sessions.find(s=>s.status==="open") || null}
+function fmtDate(iso){if(!iso) return "-"; return new Date(iso).toLocaleString("ar-EG")}
+function num(v){const n=Number(String(v??0).replace(/,/g,"")); return isNaN(n)?0:n}
+function clean(v){return String(v??"").trim()}
+function norm(v){return clean(v).toLowerCase()}
+
+async function login(){
+  const name = clean(document.getElementById("loginName").value);
+  const pass = clean(document.getElementById("loginPass").value);
+  document.getElementById("loginError").classList.add("hidden");
+  await cloudLoadAll();
+  startLiveRefresh();
+  if(!name){document.getElementById("loginError").textContent="اكتب اسمك أولًا";document.getElementById("loginError").classList.remove("hidden");return}
+  if(pass === state.settings.adminPassword){
+    currentUser = {name, role:"admin"};
+    enterApp();
+    showAdmin();
+    return;
+  }
+  if(pass === state.settings.staffPassword){
+    currentUser = {name, role:"staff"};
+    enterApp();
+    goStaffStart();
+    if(!activeSession()){
+      showModal(`<h2 style="color:var(--danger)">لا توجد جلسة جرد مفتوحة</h2><p class="muted">برجاء الرجوع إلى الأدمن لفتح جلسة جرد قبل البدء.</p><div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">موافق</button></div>`);
+    }
+    return;
+  }
+  document.getElementById("loginError").textContent="كلمة المرور غير صحيحة";
+  document.getElementById("loginError").classList.remove("hidden");
+}
+function enterApp(){
+  document.getElementById("loginPage").classList.add("hidden");
+  document.getElementById("appPage").classList.remove("hidden");
+  document.getElementById("headerUser").textContent=currentUser.name;
+  document.getElementById("headerRole").textContent=currentUser.role==="admin"?"مدير النظام":"موظف جرد";
+}
+function logout(){
+  currentUser=null; selectedProduct=null;
+  document.getElementById("appPage").classList.add("hidden");
+  document.getElementById("loginPage").classList.remove("hidden");
+  document.getElementById("loginPass").value="";
+}
+function hidePages(){
+  ["staffStartPage","staffScanPage","staffQtyPage","adminPage"].forEach(id=>document.getElementById(id).classList.add("hidden"));
+}
+function goStaffStart(){
+  hidePages();
+  document.getElementById("staffStartPage").classList.remove("hidden");
+  updateStartLast();
+  const startBtn = document.querySelector("#staffStartPage .btn-primary");
+  if(startBtn){
+    if(activeSession()){
+      startBtn.disabled = false;
+      startBtn.style.opacity = "1";
+      startBtn.textContent = "▶ بداية الجرد";
+    }else{
+      startBtn.disabled = true;
+      startBtn.style.opacity = ".55";
+      startBtn.textContent = "لا توجد جلسة مفتوحة";
+    }
+  }
+}
+function goStaffScan(){
+  if(!activeSession()){showModal(`<h2>لا توجد جلسة جرد مفتوحة</h2><p class="muted">برجاء الرجوع إلى الأدمن لفتح جلسة جرد.</p><div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">موافق</button></div>`);return}
+  hidePages();
+  document.getElementById("staffScanPage").classList.remove("hidden");
+  document.getElementById("scanInput").value="";
+  document.getElementById("searchResults").classList.add("hidden");
+  setTimeout(()=>document.getElementById("scanInput").focus(),80);
+}
+function backToScan(){goStaffScan()}
+function showAdmin(){
+  hidePages();
+  document.getElementById("adminPage").classList.remove("hidden");
+  renderAdmin();
+}
+function scanKey(e){
+  if(e.key==="Enter"){
+    e.preventDefault();
+    resolveScan(clean(e.target.value));
+  }
+}
+function liveSearch(){
+  const q = clean(document.getElementById("scanInput").value);
+  const box = document.getElementById("searchResults");
+  if(q.length < 2){box.classList.add("hidden");box.innerHTML="";return}
+  const matches = findProducts(q).slice(0,8);
+  if(matches.length<=1){box.classList.add("hidden");box.innerHTML="";return}
+  box.classList.remove("hidden");
+  box.innerHTML = matches.map((p,i)=>`
+    <div class="result-item">
+      <div>
+        <b>${escapeHtml(p.name)}</b>
+        <div class="muted">${escapeHtml(p.barcode)} - ${escapeHtml(p.category)}</div>
+      </div>
+      <button class="btn btn-outline" onclick="selectProductByIndex(${state.products.indexOf(p)})">اختيار</button>
+    </div>`).join("");
+}
+function findProducts(q){
+  const nq=norm(q);
+  return state.products.filter(p => norm(p.barcode).includes(nq) || norm(p.name).includes(nq));
+}
+function resolveScan(q){
+  if(!q) return;
+  const matches = findProducts(q);
+  if(matches.length===0){
+    showModal(`<h2 style="color:var(--danger)">الباركود غير متاح</h2><p class="muted">لم يتم العثور على منتج مطابق.</p><div class="modal-actions"><button class="btn btn-primary" onclick="closeModal();goStaffScan()">موافق</button></div>`);
+    return;
+  }
+  const exact = matches.find(p=>norm(p.barcode)===norm(q));
+  if(exact){selectProduct(exact);return}
+  if(matches.length===1){selectProduct(matches[0]);return}
+  showModal(`<h2>اختر المنتج</h2><div class="result-list">${matches.slice(0,20).map(p=>`
+    <div class="result-item">
+      <div><b>${escapeHtml(p.name)}</b><div class="muted">${escapeHtml(p.barcode)} - ${escapeHtml(p.category)}</div></div>
+      <button class="btn btn-outline" onclick="closeModal();selectProductByIndex(${state.products.indexOf(p)})">اختيار</button>
+    </div>`).join("")}</div><div class="modal-actions"><button class="btn btn-danger" onclick="closeModal()">إلغاء</button></div>`);
+}
+function selectProductByIndex(i){selectProduct(state.products[i])}
+function selectProduct(product){
+  selectedProduct = product;
+  hidePages();
+  document.getElementById("staffQtyPage").classList.remove("hidden");
+  renderSelectedProduct();
+  document.getElementById("saveSuccess").classList.add("hidden");
+  document.getElementById("qtyInput").value="";
+  setTimeout(()=>document.getElementById("qtyInput").focus(),80);
+}
+function productMovements(barcode){
+  const s=activeSession();
+  return state.movements.filter(m=>m.sessionId===(s?s.id:null) && m.barcode===barcode);
+}
+function renderSelectedProduct(){
+  const p=selectedProduct;
+  const moves=productMovements(p.barcode);
+  const total=moves.reduce((a,m)=>a+num(m.qty),0);
+  document.getElementById("pName").textContent=p.name;
+  document.getElementById("pBarcode").textContent=p.barcode;
+  document.getElementById("pCategory").textContent=p.category;
+  document.getElementById("pSystemQty").textContent=p.systemQty;
+  document.getElementById("pUom").textContent=p.uom || "-";
+  document.getElementById("pPrevQty").textContent=total;
+  const tag=document.getElementById("countStateTag");
+  if(moves.length){
+    tag.textContent=`تم جرده قبل كده - ${moves.length} مرة`;
+    tag.className="tag green";
+  }else{
+    tag.textContent="أول مرة";
+    tag.className="tag orange";
+  }
+}
+function qtyKey(e){
+  if(e.key==="Enter"){
+    e.preventDefault();
+    saveQty();
+  }
+}
+async function saveQty(){
+  const qty = num(document.getElementById("qtyInput").value);
+  if(!selectedProduct || document.getElementById("qtyInput").value===""){return}
+  const s=activeSession();
+  if(!s){showModal(`<h2>لا توجد جلسة مفتوحة</h2><div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">موافق</button></div>`);return}
+  const before=productMovements(selectedProduct.barcode).length;
+  const movement = {
+    id:"M-"+Date.now()+"-"+Math.random().toString(16).slice(2),
+    sessionId:s.id,
+    employee:currentUser.name,
+    barcode:selectedProduct.barcode,
+    name:selectedProduct.name,
+    category:selectedProduct.category,
+    systemQty:num(selectedProduct.systemQty),
+    cost:num(selectedProduct.cost),
+    uom:selectedProduct.uom,
+    qty,
+    statusBefore: before>0 ? "تكرار" : "أول مرة",
+    createdAt:new Date().toISOString()
+  };
+  try{
+    const saved = await cloudInsertMovement(movement);
+    state.movements.push(saved || movement);
+  }catch(err){
+    console.error(err);
+    alert("لم يتم حفظ الحركة أونلاين. راجع اتصال الإنترنت أو إعدادات Supabase.");
+    return;
+  }
+  saveState();
+  document.getElementById("saveSuccess").innerHTML=`تم حفظ الحركة بنجاح<br><span class="muted">تم تسجيل ${escapeHtml(selectedProduct.name)} بكمية ${qty}</span>`;
+  document.getElementById("saveSuccess").classList.remove("hidden");
+  updateStartLast();
+  setTimeout(()=>goStaffScan(),650);
+}
+function updateStartLast(){
+  const el=document.getElementById("startLastText");
+  if(!currentUser || !el) return;
+  const last=[...state.movements].reverse().find(m=>m.employee===currentUser.name);
+  const count = state.movements.filter(m=>m.employee===currentUser.name).length;
+  el.textContent = last ? `آخر حركة: ${last.name} - كمية ${last.qty} | إجمالي حركاتك: ${count}` : "لا توجد حركات مسجلة بعد";
+}
+function openLastMovement(){ openMyMovements(); }
+
+function openMyMovements(){
+  if(!currentUser) return;
+  const myMoves=[...state.movements].filter(m=>m.employee===currentUser.name).reverse();
+  if(!myMoves.length){
+    showModal(`<h2>حركاتي</h2><p class="muted">لا توجد حركات مسجلة بعد.</p><div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">موافق</button></div>`);
+    return;
+  }
+  showModal(`<div class="panel-title"><h2>حركاتي المسجلة</h2><span class="tag">${myMoves.length} حركة</span></div>
+    <p class="muted">يمكنك تعديل أي حركة قمت بتسجيلها أنت فقط.</p>
+    <div class="table-wrap" style="max-height:420px;overflow:auto">
+      <table style="min-width:760px">
+        <thead><tr><th>الوقت</th><th>المنتج</th><th>الباركود</th><th>الكمية</th><th>تعديل</th></tr></thead>
+        <tbody>
+          ${myMoves.map(m=>`<tr>
+            <td>${fmtDate(m.createdAt)}</td>
+            <td>${escapeHtml(m.name)}</td>
+            <td>${escapeHtml(m.barcode)}</td>
+            <td><input id="moveQty_${m.id}" class="input" type="number" step="0.001" value="${m.qty}" style="height:40px;max-width:130px;text-align:center"></td>
+            <td><button class="btn btn-outline" onclick="updateMovementQty('${m.id}')">حفظ</button></td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+    <div class="modal-actions"><button class="btn btn-danger" onclick="closeModal()">إغلاق</button></div>`);
+}
+
+function updateLastMovement(id){ updateMovementQty(id); }
+
+async function updateMovementQty(id){
+  const m=state.movements.find(x=>x.id===id);
+  if(!m) return;
+  if(currentUser && currentUser.role !== "admin" && m.employee !== currentUser.name){
+    alert("غير مسموح بتعديل حركة موظف آخر");
+    return;
+  }
+  const input = document.getElementById("moveQty_"+id) || document.getElementById("editLastQty");
+  if(!input) return;
+  const newQty = num(input.value);
+  try{
+    if(cloud){
+      const {error} = await cloud.from("inventory_movements").update({qty:newQty, updated_at:new Date().toISOString()}).eq("id", id);
+      if(error) throw error;
+    }
+    m.qty=newQty;
+    m.updatedAt=new Date().toISOString();
+    saveState();
+    updateStartLast();
+    if(currentUser && currentUser.role==="admin") renderAdmin();
+    alert("تم حفظ التعديل");
+  }catch(err){
+    console.error(err);
+    alert("لم يتم حفظ التعديل أونلاين");
+  }
+}
+
+function calcRows(sessionIds){
+  let ids = sessionIds;
+  if(!ids){
+    const s=activeSession() || state.sessions[0] || {};
+    ids = s.id ? [s.id] : [];
+  }
+  const moves = state.movements.filter(m=>ids.includes(m.sessionId));
+  const byBarcode = {};
+  moves.forEach(m=>{
+    byBarcode[m.barcode]=(byBarcode[m.barcode]||0)+num(m.qty);
+  });
+  return state.products.map(p=>{
+    const countedQty = byBarcode[p.barcode] || 0;
+    const isCounted = Object.prototype.hasOwnProperty.call(byBarcode,p.barcode);
+    const diff = countedQty - num(p.systemQty);
+    let status = "مطابق";
+    if(!isCounted) status="لم يتم جرده";
+    else if(countedQty===0) status="زيرو";
+    else if(diff<0) status="عجز";
+    else if(diff>0) status="أوفر";
+    return {...p, countedQty, diff, status,
+      systemValue:num(p.systemQty)*num(p.cost),
+      actualValue:countedQty*num(p.cost),
+      shortageValue:diff<0?Math.abs(diff)*num(p.cost):0,
+      overValue:diff>0?diff*num(p.cost):0
+    };
+  });
+}
+function stats(){
+  const rows=calcRows();
+  const sessionId = activeSession()?.id || state.sessions[0]?.id;
+  const moves=state.movements.filter(m=>m.sessionId===sessionId);
+  const counted=rows.filter(r=>r.status!=="لم يتم جرده").length;
+  return {
+    total:rows.length,
+    counted,
+    notCounted:rows.length-counted,
+    percent:rows.length?Math.round(counted/rows.length*100):0,
+    moves:moves.length,
+    employees:new Set(moves.map(m=>m.employee)).size,
+    shortage:rows.filter(r=>r.status==="عجز").length,
+    over:rows.filter(r=>r.status==="أوفر").length,
+    zero:rows.filter(r=>r.status==="زيرو").length
+  }
+}
+function renderAdmin(){
+  renderAdminStats();
+  setAdminTab(currentTab, true);
+}
+function renderAdminStats(){
+  const s=stats();
+  const data=[
+    ["إجمالي المنتجات",s.total,"منتج"],
+    ["تم جردها",s.counted,"منتج"],
+    ["غير المجردة",s.notCounted,"منتج"],
+    ["نسبة الإنجاز",s.percent+"%","من الإجمالي"],
+    ["حركات الجرد",s.moves,"حركة"],
+    ["عدد الموظفين",s.employees,"موظف"]
+  ];
+  document.getElementById("adminStats").innerHTML=data.map(x=>`<div class="stat"><div class="cap">${x[0]}</div><div class="num">${x[1]}</div><div class="cap">${x[2]}</div></div>`).join("");
+}
+function setAdminTab(tab, silent){
+  currentTab=tab;
+  document.querySelectorAll(".tab-btn").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  const content=document.getElementById("adminContent");
+  const rows=calcRows();
+  if(tab==="overview") content.innerHTML=overviewHtml(rows);
+  if(tab==="session") content.innerHTML=sessionHtml();
+  if(tab==="upload") content.innerHTML=uploadHtml();
+  if(tab==="movements") content.innerHTML=movementsHtml();
+  if(tab==="notCounted") content.innerHTML=reportTable("المنتجات غير المجردة", rows.filter(r=>r.status==="لم يتم جرده"));
+  if(tab==="zero") content.innerHTML=reportTable("منتجات الزيرو", rows.filter(r=>r.status==="زيرو"));
+  if(tab==="shortage") content.innerHTML=reportTable("منتجات العجز", rows.filter(r=>r.status==="عجز"));
+  if(tab==="over") content.innerHTML=reportTable("منتجات الأوفر", rows.filter(r=>r.status==="أوفر"));
+  if(tab==="financial") content.innerHTML=financialHtml(rows);
+  if(tab==="settings") content.innerHTML=settingsHtml();
+  if(!silent) renderAdminStats();
+}
+function overviewHtml(rows){
+  const byCat={};
+  rows.forEach(r=>{
+    const c=r.category||"بدون قسم";
+    if(!byCat[c]) byCat[c]={total:0,counted:0};
+    byCat[c].total++;
+    if(r.status!=="لم يتم جرده") byCat[c].counted++;
+  });
+  const latest=[...state.movements].reverse().slice(0,8);
+  const employees={};
+  state.movements.forEach(m=>{employees[m.employee]=(employees[m.employee]||0)+1});
+  return `
+  <div class="panel-title"><h2>متابعة التشغيل</h2><button class="btn btn-primary" onclick="exportExcel()">تصدير Excel</button></div>
+  <h3>نسبة انتهاء الجرد حسب القسم</h3>
+  ${Object.entries(byCat).map(([c,v])=>{
+    const p=v.total?Math.round(v.counted/v.total*100):0;
+    return `<div class="progress-row"><b>${escapeHtml(c)}</b><div class="bar"><span style="width:${p}%"></span></div><b>${p}%</b></div>`
+  }).join("") || `<div class="empty">لا توجد منتجات بعد</div>`}
+  <br>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div><h3>آخر الحركات</h3>${smallMovementList(latest)}</div>
+    <div><h3>متابعة الموظفين</h3>${Object.entries(employees).map(([e,c])=>`<div class="result-item"><b>${escapeHtml(e)}</b><span class="tag">${c} حركة</span></div>`).join("") || `<div class="empty">لا توجد حركات</div>`}</div>
+  </div>`;
+}
+function sessionHtml(){
+  const s=activeSession();
+  const all = state.sessions || [];
+  return `<div class="panel-title"><h2>جلسات الجرد</h2></div>
+  <div class="card" style="box-shadow:none;margin-bottom:16px">
+    <h3>${s?escapeHtml(s.name):"لا توجد جلسة مفتوحة"}</h3>
+    <p class="muted">الحالة: ${s?'<span class="tag green">مفتوحة</span>':'<span class="tag orange">لا توجد جلسة مفتوحة</span>'}</p>
+    <div class="field"><label>اسم جلسة جديدة</label><input id="newSessionName" class="input" placeholder="مثال: جرد فرع عباس - تاريخ اليوم"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="openNewSession()">فتح جلسة جديدة</button>
+      <button class="btn btn-danger" onclick="closeCurrentSession()">إغلاق الجلسة الحالية</button>
+    </div>
+  </div>
+
+  <div class="card" style="box-shadow:none;margin-bottom:16px">
+    <div class="panel-title">
+      <h3>كل الجلسات السابقة والحالية</h3>
+      <button class="btn btn-primary" onclick="exportSelectedSessions()">دمج وتصدير الجلسات المحددة</button>
+    </div>
+    <p class="muted">حدد أكثر من جلسة لعمل تقرير مجمع بينهم. التقرير سيجمع كميات نفس المنتج من كل الجلسات المختارة.</p>
+    ${all.length?`<div class="table-wrap"><table>
+      <thead><tr><th>اختيار</th><th>اسم الجلسة</th><th>الحالة</th><th>وقت الفتح</th><th>وقت الإغلاق</th><th>عدد الحركات</th></tr></thead>
+      <tbody>
+        ${all.map(sess=>{
+          const count = state.movements.filter(m=>m.sessionId===sess.id).length;
+          return `<tr>
+            <td><input type="checkbox" class="sessionPick" value="${sess.id}" ${sess.status==="open"?"checked":""}></td>
+            <td>${escapeHtml(sess.name)}</td>
+            <td>${sess.status==="open"?'<span class="tag green">مفتوحة</span>':'<span class="tag">مغلقة</span>'}</td>
+            <td>${fmtDate(sess.openedAt)}</td>
+            <td>${fmtDate(sess.closedAt)}</td>
+            <td>${count}</td>
+          </tr>`
+        }).join("")}
+      </tbody>
+    </table></div>`:`<div class="empty">لا توجد جلسات بعد</div>`}
+  </div>`;
+}
+
+function uploadHtml(){
+  return `<div class="panel-title"><h2>رفع شيت المنتجات</h2></div>
+  <div class="file-box">
+    <h3>ارفع ملف Excel من أودو</h3>
+    <p class="muted">الأعمدة المقبولة: Barcode, Name, الكمية في اليد, Cost, فئة المنتج, وحدة القياس</p>
+    <input id="excelFile" type="file" accept=".xlsx,.xls,.csv" class="input" style="padding:15px;height:auto;background:#fff" />
+    <button class="btn btn-primary" style="margin-top:14px" onclick="importExcel()">رفع الملف</button>
+  </div>`;
+}
+function movementsHtml(){
+  const moves=[...state.movements].reverse();
+  if(!moves.length) return `<h2>تفاصيل الحركات</h2><div class="empty">لا توجد حركات</div>`;
+  return `<div class="panel-title"><h2>تفاصيل الحركات</h2><button class="btn btn-primary" onclick="exportExcel()">تصدير Excel</button></div>
+  <div class="table-wrap"><table><thead><tr><th>الوقت</th><th>الموظف</th><th>المنتج</th><th>الباركود</th><th>القسم</th><th>الكمية</th><th>الحالة</th></tr></thead>
+  <tbody>${moves.map(m=>`<tr><td>${fmtDate(m.createdAt)}</td><td>${escapeHtml(m.employee)}</td><td>${escapeHtml(m.name)}</td><td>${escapeHtml(m.barcode)}</td><td>${escapeHtml(m.category)}</td><td>${m.qty}</td><td>${m.statusBefore}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function reportTable(title, rows){
+  return `<div class="panel-title"><h2>${title}</h2><button class="btn btn-primary" onclick="exportExcel()">تصدير Excel</button></div>
+  ${rows.length?`<div class="table-wrap"><table><thead><tr><th>المنتج</th><th>الباركود</th><th>القسم</th><th>كمية النظام</th><th>الكمية الفعلية</th><th>الفرق</th><th>الحالة</th></tr></thead>
+  <tbody>${rows.map(r=>`<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.barcode)}</td><td>${escapeHtml(r.category)}</td><td>${r.systemQty}</td><td>${r.countedQty}</td><td>${r.diff}</td><td>${r.status}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">لا توجد بيانات</div>`}`;
+}
+function financialHtml(rows){
+  const totalSystem=rows.reduce((a,r)=>a+r.systemValue,0);
+  const totalActual=rows.reduce((a,r)=>a+r.actualValue,0);
+  const totalShort=rows.reduce((a,r)=>a+r.shortageValue,0);
+  const totalOver=rows.reduce((a,r)=>a+r.overValue,0);
+  return `<div class="panel-title"><h2>التقرير المالي</h2><button class="btn btn-primary" onclick="exportExcel()">تصدير Excel</button></div>
+  <div class="admin-grid" style="grid-template-columns:repeat(4,1fr)">
+    <div class="stat"><div class="cap">قيمة السيستم</div><div class="num">${totalSystem.toFixed(2)}</div></div>
+    <div class="stat"><div class="cap">قيمة الفعلي</div><div class="num">${totalActual.toFixed(2)}</div></div>
+    <div class="stat"><div class="cap">قيمة العجز</div><div class="num">${totalShort.toFixed(2)}</div></div>
+    <div class="stat"><div class="cap">قيمة الأوفر</div><div class="num">${totalOver.toFixed(2)}</div></div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>المنتج</th><th>القسم</th><th>كمية النظام</th><th>الفعلي</th><th>الفرق</th><th>Cost</th><th>قيمة السيستم</th><th>قيمة الفعلي</th><th>قيمة العجز</th><th>قيمة الأوفر</th></tr></thead>
+  <tbody>${rows.map(r=>`<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.category)}</td><td>${r.systemQty}</td><td>${r.countedQty}</td><td>${r.diff}</td><td>${r.cost}</td><td>${r.systemValue.toFixed(2)}</td><td>${r.actualValue.toFixed(2)}</td><td>${r.shortageValue.toFixed(2)}</td><td>${r.overValue.toFixed(2)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function settingsHtml(){
+  return `<div class="panel-title"><h2>الإعدادات</h2></div>
+  <div class="settings-grid">
+    <div class="field"><label>باسورد الموظفين</label><input id="staffPassSet" class="input" value="${escapeHtml(state.settings.staffPassword)}"></div>
+    <div class="field"><label>باسورد الأدمن</label><input id="adminPassSet" class="input" value="${escapeHtml(state.settings.adminPassword)}"></div>
+  </div>
+  <div class="modal-actions">
+    <button class="btn btn-primary" onclick="saveSettings()">حفظ الإعدادات</button>
+    <button class="btn btn-danger" onclick="resetAll()">مسح كل البيانات</button>
+  </div>`;
+}
+function smallMovementList(moves){
+  return moves.map(m=>`<div class="result-item"><div><b>${escapeHtml(m.name)}</b><div class="muted">${escapeHtml(m.employee)} - ${fmtDate(m.createdAt)}</div></div><span class="tag">${m.qty}</span></div>`).join("") || `<div class="empty">لا توجد حركات</div>`;
+}
+async function openNewSession(){
+  const name=clean(document.getElementById("newSessionName").value)||`جلسة جرد ${new Date().toLocaleDateString("ar-EG")}`;
+  try{
+    const now = new Date().toISOString();
+    if(cloud){
+      const openIds = state.sessions.filter(s=>s.status==="open").map(s=>s.id);
+      for(const id of openIds){
+        await cloud.from("inventory_sessions").update({status:"closed", closed_at:now}).eq("id", id);
+      }
+      const {data, error} = await cloud.from("inventory_sessions").insert({name, status:"open", opened_at:now, created_by:currentUser.name}).select().single();
+      if(error) throw error;
+      await cloudLoadAll();
+    }else{
+      state.sessions.forEach(s=>{if(s.status==="open"){s.status="closed";s.closedAt=now}});
+      state.sessions.unshift({id:"S-"+Date.now(),name,openedAt:now,closedAt:null,status:"open"});
+    }
+    saveState(); renderAdmin();
+  }catch(err){
+    console.error(err);
+    alert("لم يتم فتح الجلسة أونلاين");
+  }
+}
+async function closeCurrentSession(){
+  const s=activeSession();
+  if(!s) return;
+  if(!confirm("هل تريد إغلاق جلسة الجرد الحالية؟")) return;
+  try{
+    const now = new Date().toISOString();
+    if(cloud){
+      const {error} = await cloud.from("inventory_sessions").update({status:"closed", closed_at:now}).eq("id", s.id);
+      if(error) throw error;
+      await cloudLoadAll();
+    }else{
+      s.status="closed"; s.closedAt=now;
+    }
+    saveState(); renderAdmin();
+  }catch(err){
+    console.error(err);
+    alert("لم يتم إغلاق الجلسة أونلاين");
+  }
+}
+async function importExcel(){
+  const file=document.getElementById("excelFile").files[0];
+  if(!file){alert("اختر ملف Excel أولًا");return}
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    const wb=XLSX.read(new Uint8Array(e.target.result),{type:"array"});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const data=XLSX.utils.sheet_to_json(ws,{defval:""});
+    state.products=data.map((r,idx)=>({
+      barcode: clean(r["Barcode"] ?? r["barcode"] ?? r["الباركود"] ?? r["باركود"] ?? r["Internal Reference"] ?? r["المعرف"] ?? ("NO-"+idx)),
+      name: clean(r["Name"] ?? r["name"] ?? r["اسم المنتج"] ?? r["المنتج"]),
+      systemQty: num(r["الكمية في اليد"] ?? r["Quantity On Hand"] ?? r["System Qty"] ?? r["كمية السيستم"] ?? r["الكمية"]),
+      cost: num(r["Cost"] ?? r["cost"] ?? r["التكلفة"] ?? r["تكلفة"]),
+      category: clean(r["فئة المنتج"] ?? r["Category"] ?? r["category"] ?? r["القسم"] ?? "بدون قسم"),
+      uom: clean(r["وحدة القياس"] ?? r["Unit of Measure"] ?? r["UoM"] ?? r["الوحدة"] ?? "")
+    })).filter(p=>p.name || p.barcode);
+    try{
+      if(cloud){
+        await cloud.from("inventory_products").delete().neq("id", -1);
+        const payload = state.products.map(p=>({
+          barcode:p.barcode,
+          name:p.name,
+          system_qty:p.systemQty,
+          cost:p.cost,
+          category:p.category,
+          uom:p.uom
+        }));
+        const batchSize = 500;
+        for(let i=0;i<payload.length;i+=batchSize){
+          const {error} = await cloud.from("inventory_products").insert(payload.slice(i,i+batchSize));
+          if(error) throw error;
+        }
+        await cloudLoadAll();
+      }
+      saveState();
+      showModal(`<h2>تم رفع الملف بنجاح</h2><p class="muted">تم تحميل ${state.products.length} منتج أونلاين.</p><div class="modal-actions"><button class="btn btn-primary" onclick="closeModal();renderAdmin()">موافق</button></div>`);
+    }catch(err){
+      console.error(err);
+      alert("حصل خطأ أثناء رفع المنتجات إلى Supabase");
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+async function saveSettings(){
+  state.settings.staffPassword=clean(document.getElementById("staffPassSet").value)||"1234";
+  state.settings.adminPassword=clean(document.getElementById("adminPassSet").value)||"admin123";
+  try{
+    if(cloud){
+      if(state.settings.id){
+        const {error} = await cloud.from("inventory_settings").update({
+          staff_password:state.settings.staffPassword,
+          admin_password:state.settings.adminPassword,
+          updated_at:new Date().toISOString()
+        }).eq("id", state.settings.id);
+        if(error) throw error;
+      }else{
+        const {error} = await cloud.from("inventory_settings").insert({
+          staff_password:state.settings.staffPassword,
+          admin_password:state.settings.adminPassword
+        });
+        if(error) throw error;
+      }
+      await cloudLoadAll();
+    }
+    saveState();
+    alert("تم حفظ الإعدادات");
+  }catch(err){
+    console.error(err);
+    alert("لم يتم حفظ الإعدادات أونلاين");
+  }
+}
+async function resetAll(){
+  if(prompt("اكتب DELETE لتأكيد مسح كل البيانات")!=="DELETE") return;
+  try{
+    if(cloud){
+      await cloud.from("inventory_movements").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await cloud.from("inventory_sessions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await cloud.from("inventory_products").delete().neq("id", -1);
+      await cloud.from("inventory_settings").delete().neq("id", -1);
+      await cloud.from("inventory_settings").insert({staff_password:"1234", admin_password:"admin123"});
+      await cloudLoadAll();
+    }else{
+      state=defaultState();
+    }
+    saveState(); renderAdmin();
+  }catch(err){
+    console.error(err);
+    alert("لم يتم مسح البيانات أونلاين");
+  }
+}
+function exportSelectedSessions(){
+  const ids=[...document.querySelectorAll(".sessionPick:checked")].map(x=>x.value);
+  if(!ids.length){alert("حدد جلسة واحدة على الأقل");return}
+  exportExcel(ids, "Merged_Sessions");
+}
+
+function exportExcel(sessionIds, fileSuffix){
+  const rows=calcRows(sessionIds);
+  let movementSource = state.movements;
+  if(sessionIds && sessionIds.length){
+    movementSource = state.movements.filter(m=>sessionIds.includes(m.sessionId));
+  }
+  const movementRows=movementSource.map(m=>({
+    "الوقت":fmtDate(m.createdAt),"الموظف":m.employee,"Barcode":m.barcode,"Name":m.name,"فئة المنتج":m.category,"الكمية":m.qty,"حالة الجرد":m.statusBefore
+  }));
+  const baseRows=rows.map(r=>({
+    "Barcode":r.barcode,"Name":r.name,"فئة المنتج":r.category,"وحدة القياس":r.uom,"كمية النظام":r.systemQty,"الكمية الفعلية":r.countedQty,"الفرق":r.diff,"الحالة":r.status,"Cost":r.cost
+  }));
+  const financial=rows.map(r=>({
+    "Barcode":r.barcode,"Name":r.name,"فئة المنتج":r.category,"كمية النظام":r.systemQty,"الكمية الفعلية":r.countedQty,"الفرق":r.diff,"Cost":r.cost,
+    "قيمة السيستم":r.systemValue,"قيمة الفعلي":r.actualValue,"قيمة العجز":r.shortageValue,"قيمة الأوفر":r.overValue
+  }));
+  const wb=XLSX.utils.book_new();
+  addSheet(wb,"All Products",baseRows);
+  addSheet(wb,"Counted Products",baseRows.filter(r=>r["الحالة"]!=="لم يتم جرده"));
+  addSheet(wb,"Not Counted",baseRows.filter(r=>r["الحالة"]==="لم يتم جرده"));
+  addSheet(wb,"Zero Products",baseRows.filter(r=>r["الحالة"]==="زيرو"));
+  addSheet(wb,"Shortage",baseRows.filter(r=>r["الحالة"]==="عجز"));
+  addSheet(wb,"Over",baseRows.filter(r=>r["الحالة"]==="أوفر"));
+  addSheet(wb,"Movements",movementRows);
+  addSheet(wb,"Financial Report",financial);
+  XLSX.writeFile(wb, `CStore_Inventory_Report_${fileSuffix || "Current"}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+function addSheet(wb,name,rows){XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length?rows:[{}]), name)}
+function showModal(html){document.getElementById("modalContent").innerHTML=html;document.getElementById("modal").classList.remove("hidden")}
+function closeModal(){document.getElementById("modal").classList.add("hidden")}
+function escapeHtml(str){return String(str??"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+</script>
+</body>
+</html>
+<script src="js/app.js"></script>
